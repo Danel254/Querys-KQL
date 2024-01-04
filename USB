@@ -2,8 +2,7 @@
 let UsbDriveMount = DeviceEvents
 | where ActionType=="UsbDriveMounted"
 | extend ParsedFields=parse_json(AdditionalFields)
-| project DeviceId, DeviceName, DriveLetter=ParsedFields.DriveLetter, MountTime=Timestamp,
-  ProductName=ParsedFields.ProductName,SerialNumber=ParsedFields.SerialNumber,Manufacturer=ParsedFields.Manufacturer
+| project DeviceId, DriveLetter=ParsedFields.DriveLetter, MountTime=Timestamp
 | order by DeviceId asc, MountTime desc;
 
 // Filtra eventos de creación de archivos con un rango de tiempo específico (15 de agosto a 15 de diciembre)
@@ -13,14 +12,13 @@ let FileCreation = DeviceFileEvents
 | where FolderPath !startswith "C:\\"
 | where FolderPath !startswith "\\"
 | where Timestamp >= datetime(2024-08-15) and Timestamp <= datetime(2024-12-15) // Se añadió el filtro de rango de tiempo
-| project ReportId, DeviceId, InitiatingProcessAccountDomain,
-  InitiatingProcessAccountName, InitiatingProcessAccountUpn,
-  FileName, FolderPath, SHA256, Timestamp, SensitivityLabel, IsAzureInfoProtectionApplied
+| project ReportId, DeviceId, FolderPath, Timestamp
 | order by DeviceId asc, Timestamp desc;
 
 // Realiza una unión de FileCreation con UsbDriveMount y aplica condiciones adicionales
-FileCreation | lookup kind=inner (UsbDriveMount) on DeviceId
+FileCreation 
+| join kind=inner (UsbDriveMount) on $left.DeviceId == $right.DeviceId
 | where FolderPath startswith DriveLetter
 | where Timestamp >= MountTime
-| partition by ReportId ( top 1 by MountTime )
-| order by DeviceId asc, Timestamp desc;
+| order by DeviceId asc, Timestamp desc
+| project ReportId, DeviceId, DriveLetter, MountTime, FolderPath, Timestamp;
