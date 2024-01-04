@@ -1,24 +1,8 @@
-// Filtra eventos de montaje de unidades USB
-let UsbDriveMount = DeviceEvents
-| where ActionType=="UsbDriveMounted"
+DeviceEvents
+| where (ActionType=="UsbDriveMounted" or (ActionType == "FileCreated" and InitiatingProcessAccountName != "system" and FolderPath !startswith "C:\\" and FolderPath !startswith "\\" and Timestamp >= datetime(2024-08-15) and Timestamp <= datetime(2024-12-15)))
 | extend ParsedFields=parse_json(AdditionalFields)
-| project DeviceId, DriveLetter=ParsedFields.DriveLetter, MountTime=Timestamp
-| order by DeviceId asc, MountTime desc;
-
-// Filtra eventos de creación de archivos con un rango de tiempo específico (15 de agosto a 15 de diciembre)
-let FileCreation = DeviceFileEvents
-| where InitiatingProcessAccountName != "system"
-| where ActionType == "FileCreated"
-| where FolderPath !startswith "C:\\"
-| where FolderPath !startswith "\\"
-| where Timestamp >= datetime(2024-08-15) and Timestamp <= datetime(2024-12-15) // Se añadió el filtro de rango de tiempo
-| project ReportId, DeviceId, FolderPath, Timestamp
-| order by DeviceId asc, Timestamp desc;
-
-// Realiza una unión de FileCreation con UsbDriveMount y aplica condiciones adicionales
-FileCreation 
-| join kind=inner (UsbDriveMount) on $left.DeviceId == $right.DeviceId
-| where FolderPath startswith DriveLetter
-| where Timestamp >= MountTime
+| project DeviceId, ActionType, DriveLetter=iff(ActionType == "UsbDriveMounted", ParsedFields.DriveLetter, ""), MountTime=iff(ActionType == "UsbDriveMounted", Timestamp, datetime(null)), 
+  ProductName=iff(ActionType == "UsbDriveMounted", ParsedFields.ProductName, ""), SerialNumber=iff(ActionType == "UsbDriveMounted", ParsedFields.SerialNumber, ""), Manufacturer=iff(ActionType == "UsbDriveMounted", ParsedFields.Manufacturer, ""),
+  InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountUpn, FileName, FolderPath, SHA256, SensitivityLabel, IsAzureInfoProtectionApplied, Timestamp, ReportId
 | order by DeviceId asc, Timestamp desc
-| project ReportId, DeviceId, DriveLetter, MountTime, FolderPath, Timestamp;
+| project ReportId, DeviceId, ActionType, DriveLetter, MountTime, ProductName, SerialNumber, Manufacturer, InitiatingProcessAccountDomain, InitiatingProcessAccountName, InitiatingProcessAccountUpn, FileName, FolderPath, SHA256, SensitivityLabel, IsAzureInfoProtectionApplied, Timestamp
