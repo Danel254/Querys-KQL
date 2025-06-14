@@ -1,0 +1,103 @@
+### 1. Resumen de Alertas
+AlertInfo
+| where Timestamp >= ago(180d)
+| summarize 
+    TotalAlerts = count(),
+    HighSeverity = countif(Severity == "High"),
+    MediumSeverity = countif(Severity == "Medium"),
+    LowSeverity = countif(Severity == "Low"),
+    ResolvedAlerts = countif(Status == "Resolved"),
+    ActiveAlerts = countif(Status != "Resolved")
+
+### 2. Resumen de Incidentes
+Incident
+| where CreatedTime >= ago(180d)
+| summarize 
+    TotalIncidents = count(),
+    ActiveIncidents = countif(Status == "Active"),
+    InProgress = countif(Status == "InProgress"),
+    ResolvedIncidents = countif(Status == "Resolved"),
+    RedirectedToM365 = countif(ServiceSource == "Microsoft 365 Defender")
+
+### 3. Correos Reportados por Usuarios
+EmailSubmission
+| where Timestamp >= ago(180d)
+| summarize 
+    TotalSubmissions = count(),
+    ReportedAsPhish = countif(ReportType == "Phish"),
+    ReportedAsSpam = countif(ReportType == "Spam"),
+    ReportedAsNotJunk = countif(ReportType == "NotJunk"),
+    ReportedByUsers = dcount(ReportSubmissionSource)
+
+### 4. Emails Clasificados como Phishing
+EmailEvents
+| where Timestamp >= ago(180d)
+| where ThreatTypes has "Phish"
+| summarize 
+    TotalPhishingEmails = count(),
+    Mitigated = countif(NetworkMessageId in (EmailClusterEvents | where Disposition == "Blocked" or Disposition == "Removed" | project NetworkMessageId)),
+    NotMitigated = countif(NetworkMessageId !in (EmailClusterEvents | where Disposition == "Blocked" or Disposition == "Removed" | project NetworkMessageId))
+
+### 5. URLs Maliciosas Detectadas
+EmailUrlInfo
+| where Timestamp >= ago(180d)
+| where ThreatType in ("Phish", "Malware", "Suspicious")
+| summarize 
+    TotalMaliciousUrls = count(),
+    UniqueDomains = dcount(UrlDomain),
+    PhishingUrls = countif(ThreatType == "Phish"),
+    MalwareUrls = countif(ThreatType == "Malware"),
+    SuspiciousUrls = countif(ThreatType == "Suspicious")
+
+### 6. Actividad Sospechosa en Dispositivos
+DeviceEvents
+| where Timestamp >= ago(180d)
+| where ActionType in ("ExploitGuardNetworkProtectionBlocked", "AntivirusDetected", "ExploitGuardControlledFolderAccessBlocked")
+| summarize 
+    EventsDetected = count(),
+    UniqueDevices = dcount(DeviceName),
+    BlockedByAV = countif(ActionType == "AntivirusDetected"),
+    BlockedByEG = countif(ActionType == "ExploitGuardNetworkProtectionBlocked")
+
+### 7. Tendencias de Alertas en el Tiempo
+AlertInfo
+| where Timestamp >= ago(180d)
+| summarize TotalAlerts = count() by bin(Timestamp, 7d)
+| order by Timestamp asc
+
+### 8. Top 10 Dispositivos Más Afectados
+AlertEvidence
+| where Timestamp >= ago(180d)
+| summarize AlertCount = count() by DeviceName
+| top 10 by AlertCount desc
+
+### 9. Top 10 Usuarios Involucrados en Incidentes
+AlertEvidence
+| where Timestamp >= ago(180d) and EntityType == "Account"
+| summarize AlertCount = count() by EntityName
+| top 10 by AlertCount desc
+
+### 10. Resumen de Técnicas MITRE Detectadas
+AlertInfo
+| where Timestamp >= ago(180d)
+| summarize Count = count() by tostring(Tactic), tostring(Technique)
+| order by Count desc
+
+### 11. Ataques Bloqueados Automáticamente por Defender
+DeviceEvents
+| where Timestamp >= ago(180d)
+| where ActionType has_any ("Blocked", "Quarantined", "Prevented")
+| summarize BlockedEvents = count(), DevicesAfectados = dcount(DeviceName)
+
+### 12. Indicadores de Compromiso (IoCs) Recientes
+ThreatIntelligenceIndicator
+| where Timestamp >= ago(180d)
+| summarize IoCs = count(), Tipos = dcount(ThreatType), Países = dcount(CountryOrRegion)
+
+### 13. Acciones Manuales vs Automáticas
+ActionCenter
+| where Timestamp >= ago(180d)
+| summarize 
+    TotalAcciones = count(),
+    Automaticas = countif(TriggeredBy == "Automated investigation"),
+    Manuales = countif(TriggeredBy != "Automated investigation")
